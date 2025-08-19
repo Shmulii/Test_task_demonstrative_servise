@@ -1,0 +1,23 @@
+# Go build artifacts
+orders-service
+orders-service.exe
+*.exe
+*.test
+*.out
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & env
+*.log
+.env
+
+# Vendor
+vendor/
+

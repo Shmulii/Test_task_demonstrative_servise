@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Order Lookup</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    input { padding: .5rem; width: 400px; }
+    button { padding: .5rem 1rem; }
+    pre { background:#f7f7f7; padding:1rem; }
+  </style>
+</head>
+<body>
+  <h1>Order Lookup</h1>
+  <p>Введите ID заказа (order_uid) и нажмите Get</p>
+  <input id="orderId" placeholder="b563feb7b2b84b6test" />
+  <button onclick="lookup()">Get</button>
+  <div id="result"></div>
+
+  <script>
+    async function lookup(){
+      const id = document.getElementById('orderId').value.trim();
+      if(!id) { alert('Введите order_uid'); return; }
+      const resDiv = document.getElementById('result');
+      resDiv.textContent = 'Loading...';
+      try {
+        const resp = await fetch('/orders/' + encodeURIComponent(id));
+        if(!resp.ok){
+          resDiv.textContent = 'Order not found or error: ' + resp.status;
+          return;
+        }
+        const data = await resp.json();
+        resDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+      } catch(e) {
+        resDiv.textContent = 'Fetch error: ' + e;
+      }
+    }
+  </script>
+</body>
+</html>
