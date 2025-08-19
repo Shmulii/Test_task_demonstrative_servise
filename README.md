@@ -1,117 +1,115 @@
-## Orders Service (Test Task)
+## Сервер запросов (Тестовое задание)
 
-Golang microservice that ingests orders from Kafka, persists them in Postgres, serves them over HTTP, and caches recent orders in-memory. Comes with Docker Compose to run Postgres and Redpanda (Kafka-compatible) locally.
+Микросервис написаный на ЯП Golang, который принимает заказы из Kafka, сохраняет их в Postgres, обслуживает по HTTP и кэширует последние заказы в памяти. Поставляется с Docker Compose для локального запуска Postgres и Redpanda (совместимых с Kafka).
 
 ### Features
-- Kafka consumer (at-least-once) parsing JSON `Order`
-- Postgres persistence with transactional upsert of aggregate (`orders`, `deliveries`, `payments`, `items`)
-- HTTP API with read-through in-memory cache
-- Static landing page
-- Graceful shutdown
+- Kafka потребитель (at-least-once) анализирующий JSON `Order`
+- Сохранеине данных Postgres вместе с транзакционной обработкой и вставкой характеристик(`orders`, `deliveries`, `payments`, `items`)
+- HTTP API со сквозным чтением кэша в памяти
+- Статическая целевая (посадочная) страница
+- Нормальное заверщение работы 
 
-## Architecture
-- `main.go`: wiring and lifecycle (startup, warmup, HTTP, consumer, shutdown)
-- `config.go`: configuration (env + defaults)
-- `models.go`: data structures (`Order`, `Delivery`, `Payment`, `Item`)
-- `db.go`: Postgres pool + save/load logic
-- `consumer.go`: Kafka reader loop (Segment `kafka-go`)
-- `http.go`: HTTP server and routes (Gorilla Mux)
-- `cashe.go`: simple concurrent cache with capacity limit
-- `migrations/001_create_tables.sql`: database schema
-- `static/`: static assets (index page)
+## Архитектура 
+- `main.go`: подключение и жизненый цикл (startup, warmup, HTTP, consumer, shutdown)
+- `config.go`: конфигурация (env + defaults)
+- `models.go`: структуры данных (`Order`, `Delivery`, `Payment`, `Item`)
+- `db.go`: Postgres pool + логика загрузки/сохранения
+- `consumer.go`: цикл чтения Kafka (сегмент `kafka-go`)
+- `http.go`: HTTP-сервер и маршруты (Gorilla Mux)
+- `cashe.go`: простой параллельный кэш с ограничением емкости
+- `migrations/001_create_tables.sql`: схема базы данных
+- `static/`: статистические ресурсы (index page)
 
-## Prerequisites
-- Docker Desktop (recommended) OR
-- Go 1.20+, Postgres 15+, and Kafka (or Redpanda)
+## Системные требования
+- Docker Desktop (реккомендуется)
+- Go 1.20+, Postgres 15+ и Kafka (или Redpanda)
 
 ## Quick start (Docker)
-This runs Postgres, Redpanda, and the service.
+Запускает Postgres, Redpanda и сервис.
 
 ```powershell
 cd "C:\Users\Василий\go-projects\Test task"
 docker compose up --build -d
 ```
 
-- Service listens on container port 8080, exposed on host port 8081 (see `docker-compose.yml`).
-- Open UI: `http://localhost:8081/`
+- Служба прослушивает порт контейнера 8080, доступ к которому осуществляется через порт хоста 8081 (см. `docker-compose.yml`).
+- Открывает UI: `http://localhost:8081/`
 
-### Apply database schema (first run)
-The service does not auto-migrate. Load the SQL into the Postgres container:
+### Применение схемы базы данных (first run)
+Служба не выполняет автоматическую миграцию. Загрузите SQL-запрос в контейнер Postgres:
 
 ```powershell
 docker cp migrations/001_create_tables.sql testtask-postgres-1:/tmp/001.sql
 docker exec -i testtask-postgres-1 psql -U orders_user -d orders_db -f /tmp/001.sql | cat
 ```
 
-### Produce sample order and query API
-`sample_order.json` contains a valid `Order`. Produce it to the `orders` topic and query it.
+### Создание простого запроса и очереди API
+Файл `sample_order.json` содержит корректный `Order`. Перенесите его в тему `orders` и выполните запрос .
 
 ```powershell
-# Copy sample to Redpanda container and produce as single-line JSON
 docker cp sample_order.json testtask-redpanda-1:/tmp/sample_order.json
 docker exec testtask-redpanda-1 sh -lc "tr -d '\n' </tmp/sample_order.json | rpk topic produce orders"
 
-# Fetch via API (PowerShell)
 $uid = (Get-Content -Raw sample_order.json | ConvertFrom-Json).order_uid
 Invoke-RestMethod -Method GET -Uri ("http://localhost:8081/orders/" + $uid) | ConvertTo-Json -Depth 6
 ```
 
-### Useful commands
+### Полезные команды
 ```powershell
-# Status / Logs
+# Статусы / логи
 docker compose ps
 docker compose logs --no-color --tail=200 orders-service
 
-# Stop / Remove
+# Остановка / Удаление
 docker compose down
 ```
 
-## Run locally without Docker
-You need Postgres and Kafka running locally, and the schema applied.
+## Запуск локально без Docker
+Необходимо запустить Postgres и Kafka локально, а также применить схему:
 
-1) Set configuration (defaults shown):
+1) Настройте конфигурацию (пример, значения по умолчанию):
 ```powershell
 $env:POSTGRES_DSN = "postgres://orders_user:orders_pass@localhost:5432/orders_db?sslmode=disable"
 $env:KAFKA_BROKER = "localhost:9092"
 ```
 
-2) Build and run:
+2) Сброка и запуск: 
 ```powershell
 go build -o orders-service .
 ./orders-service
-# or: go run .
+# либо: go run .
 ```
 
-HTTP will listen on `:8080` by default. Open `http://localhost:8080/`.
+По умолчанию HTTP будет прослушивать порт `:8080`. Откройте `http://localhost:8080/`.
 
 ## API
 - `GET /orders/{order_uid}` → returns `Order` as JSON
 - `GET /` → serves `./static/index.html`
 - `GET /static/...` → static assets
 
-Responses are JSON, `Content-Type: application/json`.
+Ответы в формате JSON, `Content-Type: application/json`.
 
-## Configuration
-Environment variables (with defaults):
+## Конфигурация
+Переменные среды (со значениями по умолчанию):
 - `POSTGRES_DSN` = `postgres://orders_user:orders_pass@localhost:5432/orders_db?sslmode=disable`
 - `KAFKA_BROKER` = `localhost:9092`
-- `KAFKA_TOPIC` = `orders` (fixed in code)
-- `HTTP_ADDR` = `:8080` (configured in code)
-- `CACHE_LIMIT` = `1000` (configured in code)
-- `STARTUP_LOAD` = `100` (configured in code)
+- `KAFKA_TOPIC` = `orders` (исправлено в коде)
+- `HTTP_ADDR` = `:8080` (настроено в коде)
+- `CACHE_LIMIT` = `1000` (настроено в коде)
+- `STARTUP_LOAD` = `100` (настроено в коде)
 
-Note: values other than `POSTGRES_DSN` and `KAFKA_BROKER` are set inside `DefaultConfig()`.
+Примечание: значения, отличные от `POSTGRES_DSN` и `KAFKA_BROKER` задаются внутри `DefaultConfig()`.
 
-## Cache behavior
-- On startup, the service loads the latest `STARTUP_LOAD` orders into cache.
-- `GET /orders/{id}` reads from cache first, otherwise fetches from DB and caches the result.
-- Cache has a hard capacity; inserts are dropped when full (no eviction).
+## Поведение кэша
+- При запуске сервис загружает `STARTUP_LOAD` последние заказы в кэш.
+- `GET /orders/{id}` сначала считывает данные из кэша, иначе извлекает данные из базы данных и кэширует результат.
+- Кэш имеет жесткую емкость. Вставки удаляются при заполнении(без вытеснения).
 
-## Kafka semantics
-- Invalid JSON and empty `order_uid` are committed (skipped) to avoid infinite retries.
-- DB errors are NOT committed (at-least-once; message will be retried later).
+## Семантика Kafka 
+- Недопустимые JSON и пустые `order_uid` фиксируются (пропускаются) для избежания бесконечных повторов.
+- Ошибки базы данных НЕ фикисруются (at-least-once; будет повторено позже).
 
-## Project structure
+## Структура проекта
 ```
 Test task/
   cashe.go
@@ -132,20 +130,10 @@ Test task/
     index.html
 ```
 
-## Development
-```powershell
-go fmt ./...
-go vet ./...
-go test ./...   # (no tests provided in this task)
-```
-
-## Troubleshooting
-- Port 8081 already in use: change the host mapping in `docker-compose.yml` under `orders-service: ports`.
-- Service starts before Postgres is ready: transient log "the database system is starting up"; it will keep running, and reads/writes will work once DB is ready.
-- Producing sample JSON fails in PowerShell with `<` redirection: use the container command shown above (avoids PowerShell redirection).
-- Docker not running: open Docker Desktop and retry `docker compose up -d`.
-
-## License
-MIT (or adapt as needed for your use case).
+## Устранение неполадок
+- Если порт 8081 уже используется: измените сопоставление хоста в `docker-compose.yml` в разделе `orders-service: ports`.
+- Сервис запускается до готовности Postgres: временный log "система базы данных запускается"; он продолжит работу и запись/чтение будут доступны после готовности базы данных.
+- Создание примера JSON файла в PowerShell завершается ошибкой с перенаправлением `<`. Использнуйте команду контейнера показанную выше (avoid PowerShell rediraction).
+- Docker не запускается: откройте Docker Desktop и повторите команду `docker compose up -d`.
 
 
