@@ -4,7 +4,7 @@ Write-Host "Testing Orders Service API..." -ForegroundColor Green
 # Test 1: Get order via API
 Write-Host "`n1. Testing API endpoint:" -ForegroundColor Yellow
 try {
-    $response = Invoke-WebRequest -Uri "http://localhost:8080/orders/b563feb7b2b84b6test" -Method GET
+    $response = Invoke-WebRequest -Uri "http://localhost:8081/order/b563feb7b2b84b6test" -Method GET
     Write-Host "Status: $($response.StatusCode)" -ForegroundColor Green
     Write-Host "Response:" -ForegroundColor Cyan
     $response.Content | ConvertFrom-Json | ConvertTo-Json -Depth 10
@@ -41,5 +41,5 @@ $itemsResult = docker exec testtask-postgres-1 psql -U orders_user -d orders_db 
 Write-Host "Items:" -ForegroundColor Cyan
 $itemsResult
 
-Write-Host "`nAPI is available at: http://localhost:8080/" -ForegroundColor Green
-Write-Host "Order endpoint: http://localhost:8080/orders/{order_uid}" -ForegroundColor Green
+Write-Host "`nAPI is available at: http://localhost:8081/" -ForegroundColor Green
+Write-Host "Order endpoint: http://localhost:8081/order/{order_uid}" -ForegroundColor Green

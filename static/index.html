@@ -15,6 +15,7 @@
   <p>Введите ID заказа (order_uid) и нажмите Get</p>
   <input id="orderId" placeholder="b563feb7b2b84b6test" />
   <button onclick="lookup()">Get</button>
+  <div id="meta" style="margin-top:.5rem;color:#666;"></div>
   <div id="result"></div>
 
   <script>
@@ -24,12 +25,14 @@
       const resDiv = document.getElementById('result');
       resDiv.textContent = 'Loading...';
       try {
-        const resp = await fetch('/orders/' + encodeURIComponent(id));
+        const resp = await fetch('/order/' + encodeURIComponent(id));
         if(!resp.ok){
           resDiv.textContent = 'Order not found or error: ' + resp.status;
           return;
         }
         const data = await resp.json();
+        const cache = resp.headers.get('X-Cache') || 'UNKNOWN';
+        document.getElementById('meta').textContent = 'Cache: ' + cache;
         resDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
       } catch(e) {
         resDiv.textContent = 'Fetch error: ' + e;

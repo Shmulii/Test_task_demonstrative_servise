@@ -18,7 +18,7 @@ func StartHTTPServer(cfg *Config, db *DB, cache *Cache) *http.Server {
 	staticDir := http.Dir("./static")
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(staticDir)))
 
-	r.HandleFunc("/orders/{order_uid}", func(w http.ResponseWriter, req *http.Request) {
+	handler := func(w http.ResponseWriter, req *http.Request) {
 		vars := mux.Vars(req)
 		uid := vars["order_uid"]
 		if uid == "" {
@@ -28,6 +28,7 @@ func StartHTTPServer(cfg *Config, db *DB, cache *Cache) *http.Server {
 
 		// Сначала пробуем кеш
 		if o, ok := cache.Get(uid); ok {
+			w.Header().Set("X-Cache", "HIT")
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(o)
 			return
@@ -43,9 +44,14 @@ func StartHTTPServer(cfg *Config, db *DB, cache *Cache) *http.Server {
 		}
 		// положим в кеш и вернем
 		cache.Set(o)
+		w.Header().Set("X-Cache", "MISS")
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(o)
-	}).Methods("GET")
+	}
+
+	// Поддерживаем оба пути: /orders/{id} и /order/{id}
+	r.HandleFunc("/orders/{order_uid}", handler).Methods("GET")
+	r.HandleFunc("/order/{order_uid}", handler).Methods("GET")
 
 	// Корневой(Root) обработчик для главной страницы
 	r.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
