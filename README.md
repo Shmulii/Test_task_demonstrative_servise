@@ -3,7 +3,7 @@
 Микросервис написаный на ЯП Golang, который принимает заказы из Kafka, сохраняет их в Postgres, обслуживает по HTTP и кэширует последние заказы в памяти. Поставляется с Docker Compose для локального запуска Postgres и Redpanda (совместимых с Kafka).
 
 ### Features
-- Kafka потребитель (at-least-once) анализирующий JSON `Order`
+- Kafka/Redpanda потребитель (at-least-once) анализирующий JSON `Order`
 - Сохранеине данных Postgres вместе с транзакционной обработкой и вставкой характеристик(`orders`, `deliveries`, `payments`, `items`)
 - HTTP API со сквозным чтением кэша в памяти
 - Статическая целевая (посадочная) страница
@@ -14,7 +14,7 @@
 - `config.go`: конфигурация (env + defaults)
 - `models.go`: структуры данных (`Order`, `Delivery`, `Payment`, `Item`)
 - `db.go`: Postgres pool + логика загрузки/сохранения
-- `consumer.go`: цикл чтения Kafka (сегмент `kafka-go`)
+- `consumer.go`: цикл чтения Kafka/Redpanda (сегмент `kafka-go`)
 - `http.go`: HTTP-сервер и маршруты (Gorilla Mux)
 - `cashe.go`: простой параллельный кэш с ограничением емкости
 - `migrations/001_create_tables.sql`: схема базы данных
@@ -40,15 +40,25 @@ docker compose up --build -d
 
 ```powershell
 docker cp migrations/001_create_tables.sql testtask-postgres-1:/tmp/001.sql
-docker exec -i testtask-postgres-1 psql -U orders_user -d orders_db -f /tmp/001.sql | cat
+docker exec -i testtask-postgres-1 psql -U orders_user -d orders_db -f /tmp/001.sql
 ```
 
-### Создание простого запроса и очереди API
-Файл `sample_order.json` содержит корректный `Order`. Перенесите его в тему `orders` и выполните запрос .
+### Создание простого заказа и запрос API
+Вариант A — через Kafka/Redpanda (если настроено):
 
 ```powershell
 docker cp sample_order.json testtask-redpanda-1:/tmp/sample_order.json
-docker exec testtask-redpanda-1 sh -lc "tr -d '\n' </tmp/sample_order.json | rpk topic produce orders"
+docker exec testtask-redpanda-1 sh -lc 'p=$(tr -d "\n" </tmp/sample_order.json); printf "%s\n" "$p" | rpk topic produce orders --brokers redpanda:9092'
+
+$uid = (Get-Content -Raw sample_order.json | ConvertFrom-Json).order_uid
+Invoke-RestMethod -Method GET -Uri ("http://localhost:8081/orders/" + $uid) | ConvertTo-Json -Depth 6
+```
+
+Вариант B — без Kafka (напрямую через SQL), удобно для локальной проверки:
+
+```powershell
+docker cp insert_order_fixed.sql testtask-postgres-1:/tmp/insert_order_fixed.sql
+docker exec -i testtask-postgres-1 psql -U orders_user -d orders_db -f /tmp/insert_order_fixed.sql
 
 $uid = (Get-Content -Raw sample_order.json | ConvertFrom-Json).order_uid
 Invoke-RestMethod -Method GET -Uri ("http://localhost:8081/orders/" + $uid) | ConvertTo-Json -Depth 6
@@ -64,8 +74,18 @@ docker compose logs --no-color --tail=200 orders-service
 docker compose down
 ```
 
+## Запуск тестов
+В отдельном терминале, пока сервис запущен:
+
+```powershell
+./test_simple.ps1
+./test_cache.ps1
+./test_api.ps1
+./test_kafka.ps1
+```
+
 ## Запуск локально без Docker
-Необходимо запустить Postgres и Kafka локально, а также применить схему:
+Необходимо запустить Postgres и Kafka/Redpanda локально, а также применить схему:
 
 1) Настройте конфигурацию (пример, значения по умолчанию):
 ```powershell
@@ -105,7 +125,7 @@ go build -o orders-service .
 - `GET /orders/{id}` сначала считывает данные из кэша, иначе извлекает данные из базы данных и кэширует результат.
 - Кэш имеет жесткую емкость. Вставки удаляются при заполнении(без вытеснения).
 
-## Семантика Kafka 
+## Семантика Kafka/Redpanda
 - Недопустимые JSON и пустые `order_uid` фиксируются (пропускаются) для избежания бесконечных повторов.
 - Ошибки базы данных НЕ фикисруются (at-least-once; будет повторено позже).
 
@@ -120,7 +140,7 @@ Test task/
   Dockerfile
   go.mod / go.sum
   http.go
-  insert_order.sql
+  insert_order_fixed.sql
   main.go
   migrations/
     001_create_tables.sql
